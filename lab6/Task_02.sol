@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract Task_Squares {
+contract Task_02 {
     function generateSquares(uint256 n) external pure returns (uint256[] memory) {
         uint256[] memory squares = new uint256[](n);
 
