@@ -2,117 +2,108 @@
 pragma solidity ^0.8.0;
 
 contract Task_11 {
-    enum State {
-        Active,
-        Paused,
-        Closed
-    }
+    enum Status { Active, Paused, Closed }
 
     address public owner;
-    uint256 public immutable goal;
-    uint256 public totalRaised;
-    State public state; 
+    Status public status;
+
+    uint256 public immutable targetAmount;
+    uint256 public totalUserDeposits;
 
     mapping(address => uint256) public deposits;
+
+    event Deposited(address indexed user, uint256 amount, uint256 totalDeposits);
+    event Withdrawn(address indexed user, uint256 amount, uint256 totalDeposits);
+    event StatusChanged(Status newStatus);
+    event Closed(uint256 totalDeposits);
+    event OwnerWithdrawn(uint256 amount);
+
+    constructor(uint256 _targetAmount) {
+        require(_targetAmount > 0, "Target must be > 0");
+        owner = msg.sender;
+        targetAmount = _targetAmount;
+        status = Status.Active;
+        emit StatusChanged(status);
+    }
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not the contract owner");
         _;
     }
 
-    modifier inState(State s) {
-        require(state == s, "Invalid state");
+    modifier whenClosed() {
+        require(status == Status.Closed, "Contract is not closed");
         _;
     }
 
-    event Deposited(address indexed from, uint256 amount, uint256 totalRaised);
-    event Refunded(address indexed to, uint256 amount, uint256 totalRaised);
-    event OwnerWithdrewOwn(uint256 amount, uint256 totalRaised);
-    event OwnerWithdrewAll(uint256 amount);
-    event StateChanged(State newState);
-
-    constructor(uint256 _goal) payable {
-        require(_goal > 0, "Goal must be > 0");
-        owner = msg.sender;
-        goal = _goal;
-
-        state = State.Active;
-
-        if (msg.value > 0) {
-            deposits[owner] += msg.value;
-            totalRaised += msg.value;
-            emit Deposited(owner, msg.value, totalRaised);
-
-            if (totalRaised >= goal) {
-                state = State.Closed;
-                emit StateChanged(state);
-            }
-        }
+    function pause() external onlyOwner {
+        require(status == Status.Active, "Not active");
+        status = Status.Paused;
+        emit StatusChanged(status);
     }
 
-    function deposit() external payable inState(State.Active) {
-        require(msg.value > 0, "Zero deposit");
+    function resume() external onlyOwner {
+        require(status == Status.Paused, "Not paused");
+        status = Status.Active;
+        emit StatusChanged(status);
+    }
+
+    function deposit() external payable {
+        require(status == Status.Active, "Deposits disabled");
+        require(msg.value > 0, "Deposit must be > 0");
 
         deposits[msg.sender] += msg.value;
-        totalRaised += msg.value;
+        totalUserDeposits += msg.value;
 
-        emit Deposited(msg.sender, msg.value, totalRaised);
+        emit Deposited(msg.sender, msg.value, totalUserDeposits);
 
-        if (totalRaised >= goal) {
-            state = State.Closed;
-            emit StateChanged(state);
+        if (totalUserDeposits >= targetAmount) {
+            status = Status.Closed;
+            emit StatusChanged(status);
+            emit Closed(totalUserDeposits);
         }
     }
 
-    function pause() external onlyOwner inState(State.Active) {
-        state = State.Paused;
-        emit StateChanged(state);
-    }
+    function withdraw() external {
+        require(status == Status.Paused, "Withdrawals allowed only when paused");
 
-    function resume() external onlyOwner inState(State.Paused) {
-        state = State.Active;
-        emit StateChanged(state);
-    }
-
-    function refund() external inState(State.Paused) {
         uint256 amount = deposits[msg.sender];
-        require(amount > 0, "Nothing to refund");
-
-        deposits[msg.sender] = 0;
-        totalRaised -= amount;
-
-        (bool ok, ) = payable(msg.sender).call{value: amount}("");
-        require(ok, "Refund failed");
-
-        emit Refunded(msg.sender, amount, totalRaised);
-    }
-
-    function ownerWithdrawOwnDeposit() external onlyOwner {
-        require(state == State.Active || state == State.Paused, "Not allowed now");
-
-        uint256 amount = deposits[owner];
-        require(amount > 0, "Owner has no deposit");
-
-        deposits[owner] = 0;
-        totalRaised -= amount;
-
-        (bool ok, ) = payable(owner).call{value: amount}("");
-        require(ok, "Withdraw failed");
-
-        emit OwnerWithdrewOwn(amount, totalRaised);
-    }
-
-    function ownerWithdrawAll() external onlyOwner inState(State.Closed) {
-        uint256 amount = address(this).balance;
         require(amount > 0, "Nothing to withdraw");
 
-        (bool ok, ) = payable(owner).call{value: amount}("");
-        require(ok, "Withdraw failed");
+        deposits[msg.sender] = 0;
+        totalUserDeposits -= amount;
 
-        emit OwnerWithdrewAll(amount);
+        (bool ok, ) = payable(msg.sender).call{value: amount}("");
+        require(ok, "Transfer failed");
+
+        emit Withdrawn(msg.sender, amount, totalUserDeposits);
     }
 
-    function contractBalance() external view returns (uint256) {
-        return address(this).balance;
+    function ownerWithdraw() external onlyOwner {
+        if (status == Status.Closed) {
+            uint256 amount = address(this).balance;
+            require(amount > 0, "Nothing to withdraw");
+
+            (bool ok, ) = payable(owner).call{value: amount}("");
+            require(ok, "Transfer failed");
+
+            emit OwnerWithdrawn(amount);
+            return;
+        }
+
+        uint256 amountOwn = deposits[owner];
+        require(amountOwn > 0, "No owner deposit");
+
+        deposits[owner] = 0;
+        totalUserDeposits -= amountOwn;
+
+        (bool ok2, ) = payable(owner).call{value: amountOwn}("");
+        require(ok2, "Transfer failed");
+
+        emit OwnerWithdrawn(amountOwn);
+    }
+
+    receive() external payable {
+        revert("Use deposit()");
     }
 }
