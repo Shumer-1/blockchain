@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+
 contract Task_11 {
-    address public owner;
+   address public owner;
     uint public targetAmount;
     uint public totalUserDeposits;
     enum State { Active, Paused, Closed }
