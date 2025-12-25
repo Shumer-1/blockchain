@@ -4,66 +4,80 @@ pragma solidity ^0.8.0;
 contract Task_07 {
     address public owner;
 
-    uint8 public constant COLORS_COUNT = 7;
+    uint256 private constant TEAM_SIZE = 3;
 
-    mapping(uint8 => string) private colors;
+    mapping(uint256 => string) private roster;
+
+    event AthleteSet(uint256 indexed index, string name);
+    event AthleteCleared(uint256 indexed index);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Not the contract owner");
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    modifier validIndex(uint256 index) {
+        require(index < TEAM_SIZE, "Index out of range");
         _;
     }
 
     constructor() {
         owner = msg.sender;
 
-        colors[0] = "Red";
-        colors[1] = "Orange";
-        colors[2] = "Yellow";
-        colors[3] = "Green";
-        colors[4] = "Blue";
-        colors[5] = "Indigo";
-        colors[6] = "Violet";
+        _set(0, "John Doe");
+        _set(1, "Jane Smith");
+        _set(2, "Mike Johnson");
     }
 
-    function addColor(uint8 index, string calldata color) external {
-        require(index < COLORS_COUNT, "Index out of range");
-        colors[index] = color;
+    // Внутренняя функция, чтобы не дублировать код установки
+    function _set(uint256 index, string memory name) internal {
+        roster[index] = name;
+        emit AthleteSet(index, name);
     }
 
-    function getColor(uint8 index) external view returns (string memory) {
-        require(index < COLORS_COUNT, "Index out of range");
-        return colors[index];
+    // Добавить/установить спортсмена (public, memory)
+    function addAthlete(uint256 index, string memory athlete) public validIndex(index) {
+        _set(index, athlete);
     }
 
-    function getAllColors() external view returns (string[] memory) {
-        string[] memory result = new string[](COLORS_COUNT);
-        for (uint8 i = 0; i < COLORS_COUNT; i++) {
-            result[i] = colors[i];
+    // Обновить спортсмена (public, calldata)
+    function updateAthlete(uint256 index, string calldata newName) public validIndex(index) {
+        roster[index] = newName;
+        emit AthleteSet(index, newName);
+    }
+
+    // Заменить всех спортсменов (только владелец)
+    function replaceAllAthletes(string[] calldata names) external onlyOwner {
+        require(names.length == TEAM_SIZE, "Need exactly 3 athletes");
+
+        for (uint256 i = 0; i < TEAM_SIZE; i++) {
+            roster[i] = names[i];
+            emit AthleteSet(i, names[i]);
         }
-        return result;
     }
 
-    function updateColor(uint8 index, string calldata newColor) external {
-        require(index < COLORS_COUNT, "Index out of range");
-        require(bytes(colors[index]).length > 0, "Color does not exist");
-        colors[index] = newColor;
+    // Получить спортсмена по индексу
+    function getAthlete(uint256 index) external view validIndex(index) returns (string memory) {
+        return roster[index];
     }
 
-    function colorExists(uint8 index) external view returns (bool) {
-        require(index < COLORS_COUNT, "Index out of range");
-        return bytes(colors[index]).length > 0;
+    // Проверить, есть ли спортсмен по индексу
+    function athleteExists(uint256 index) external view validIndex(index) returns (bool) {
+        return bytes(roster[index]).length != 0;
     }
 
-    function removeColor(uint8 index) external onlyOwner {
-        require(index < COLORS_COUNT, "Index out of range");
-        delete colors[index];
+    function removeAthlete(uint256 index) external onlyOwner validIndex(index) {
+        delete roster[index];
+        emit AthleteCleared(index);
     }
 
-    function replaceAllColors(string[] calldata newColors) external onlyOwner {
-        require(newColors.length == COLORS_COUNT, "Must provide exactly 7 colors");
+    function getAllAthletes() external view returns (string[] memory) {
+        string[] memory out = new string[](TEAM_SIZE);
 
-        for (uint8 i = 0; i < COLORS_COUNT; i++) {
-            colors[i] = newColors[i];
+        for (uint256 i = 0; i < TEAM_SIZE; i++) {
+            out[i] = roster[i];
         }
+
+        return out;
     }
 }
